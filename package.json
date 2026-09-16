@@ -4,6 +4,9 @@
     "description": "n8n community nodes for n8nChatUI: a webhook trigger and a response node for building n8nChatUI-connected chat workflows without an AI-tool/LangChain dependency.",
     "license": "MIT",
     "homepage": "https://n8nchatui.com",
+    "publishConfig": {
+        "access": "public"
+    },
     "keywords": [
         "n8n-community-node-package",
         "n8nchatui",
