@@ -56,14 +56,11 @@ Confirmed and fixed during dogfooding (2026-09-16), by decompiling the live widg
 
 Still unconfirmed, but lower priority (v1's `Message → Respond` doesn't consume this credential at all):
 
-- [ ] **Credential auth header/scheme** (`N8nChatUiApi.credentials.ts`) — `Authorization: Bearer {{apiKey}}`, the `documentationUrl`, and the `test` request URL are all placeholders against an n8nChatUI API that doesn't exist yet. Confirm the real scheme once that API exists.
-
-One more is open because this package isn't published yet:
-
-- [ ] **Icons** — both nodes and the credential share a placeholder chat-bubble SVG, now supplied as proper light/dark variants (`n8nchatui.svg` / `n8nchatui.dark.svg`) so lint passes with zero warnings. Replace with the real n8nChatUI logo before publishing; keep both variants.
+- [ ] **Credential auth header/scheme** (`N8nChatUiApi.credentials.ts`) — the `Authorization: Bearer {{apiKey}}` scheme turns out to be correct (confirmed against n8nChatUI's real dashboard API key system, `lib/mcp/auth.ts` in the main app repo — keys are `sk_...`, sent as `Bearer sk_...`). The `documentationUrl` and `test` request URL are still wrong, though: that key currently only authenticates one real endpoint, `POST /api/mcp` (n8nChatUI's own MCP server, scoped `widgets:read`/`widgets:write`), not a plain REST ping. A future v1.1 operation using this credential would need to speak MCP, not a simple HTTP request — a bigger integration shape than this credential's current `authenticate`/`test` config assumes.
 
 Resolved:
 
+- [x] **Icons.** Considered shipping a "real" n8nChatUI logo instead of the placeholder chat-bubble SVG, but there isn't one to use — checked the actual n8nChatUI website source (`components/shared/icons.tsx`) and its own "logo" is just Lucide's generic `MessageSquareMore` icon, not a bespoke mark. Decision (Dani, 2026-09-16): ship the current placeholder as-is; it's conceptually the same thing (a message-bubble glyph) with proper light/dark variants already passing lint clean.
 - [x] **Ownership + contact details** — publishes under the `dani-millside-creative` GitHub account/npm account. `package.json` `author` is `Dani Martin <dani@millsidecreative.com>`, `repository`/`bugs` fields added, `LICENSE` copyright updated to match.
 - [x] **Repository URLs in the codex files** — `nodes/*/*.node.json` `primaryDocumentation`/`credentialDocumentation` now point at `github.com/dani-millside-creative/n8n-nodes-n8nchatui`.
 
@@ -116,15 +113,20 @@ The build plan's M4 calls for rebuilding the existing `activecampaign-lead-captu
 
 ## Handoff (human-only — npm/GitHub account actions)
 
-Not done here, on purpose — this package is not published, and no git tags were pushed:
+Status as of 2026-09-16 — ready to publish, blocked only on the npm-account step below:
 
-1. Confirm the remaining placeholder assumption (`n8nChatUiApi` credential scheme) once that API exists. The response envelope and trigger auth were already confirmed and fixed against the real widget — see Open items.
-2. Ownership is settled: `dani-millside-creative/n8n-nodes-n8nchatui` on GitHub, same npm account. `package.json` (`author`, `repository`, `bugs`) and the codex doc URLs already point there.
-3. Set up npm Trusted Publishers for that GitHub Actions repo/workflow.
-4. `.github/workflows/publish.yml` (already scaffolded) is wired for provenance publishing against that repo.
-5. Publish via that GitHub Actions workflow (`npm run release` is wired locally too, but shouldn't be the publish path).
-6. Once published, `npx @n8n/scan-community-package n8n-nodes-n8nchatui` can actually run — it fetches from the npm registry by name, so it can't scan local/unpublished code (confirmed while working on this package: it 404s against a package that isn't on npm yet). Run it post-publish as a final check.
-7. Dogfood on a self-hosted instance, recruit real testers, then submit through n8n's Creator Portal for verification.
+1. [x] Confirmed the remaining placeholder assumption (`n8nChatUiApi` credential scheme) as far as it can be without a real API — see Open items. Response envelope and trigger auth are fully confirmed and fixed against the real widget.
+2. [x] Ownership is settled: `dani-millside-creative/n8n-nodes-n8nchatui` on GitHub, same npm account. `package.json` (`author`, `repository`, `bugs`) and the codex doc URLs already point there.
+3. [x] Icon decision made — shipping the existing placeholder (see Open items).
+4. [x] Package name confirmed available on the npm registry (`npm view n8n-nodes-n8nchatui` → 404, unclaimed).
+5. [x] Dogfooded live on a self-hosted instance (`n8n.millsidecreative.com`) — see Open items and the "Development" bug list for what was found and fixed this way.
+6. [ ] **Set up npm Trusted Publishers — this is the one remaining blocker, and it needs Dani's npm login, not something doable from here:**
+   - On [npmjs.com](https://npmjs.com), since this package has never been published, create it first with a throwaway local publish OR use "Create a new Trusted Publisher" from your npm account settings before the first publish (npm's Trusted Publishers UI supports pre-registering a publisher for a package name that doesn't exist yet — check the current npm docs, this has changed over time).
+   - Repository owner: `dani-millside-creative`, Repository name: `n8n-nodes-n8nchatui`, Workflow name: `publish.yml`, Environment: leave blank.
+   - Full instructions are already written out at the top of `.github/workflows/publish.yml`, including the NPM_TOKEN fallback if Trusted Publishers doesn't work for a never-published package.
+7. [ ] Once that's confirmed done: push a version tag (`git tag 0.1.0 && git push origin 0.1.0`) to trigger `publish.yml`, which lints, builds, and publishes with provenance. **Not done automatically here — ask explicitly when ready**, since this is a real, public, hard-to-reverse action.
+8. [ ] Post-publish: run `npx @n8n/scan-community-package n8n-nodes-n8nchatui` as a final check (it 404s against unpublished code, confirmed while working on this package, so it can't be run before step 7).
+9. [ ] Recruit real testers, then submit through [n8n's Creator Portal](https://docs.n8n.io/integrations/creating-nodes/deploy/submit-community-nodes/) for verification — this is a form tied to your own account, not something done from here.
 
 ## Resources
 
