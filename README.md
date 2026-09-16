@@ -49,11 +49,14 @@ Two assumptions are unconfirmed against real systems and must be checked before 
 - [ ] **Response envelope shape** (`N8nChatUi.node.ts`, `Message → Respond`) — the `output` / `renderHtml` / `quickReplies` keys are inferred from the existing recipe's `{ output: $json.output }` pattern and the widget builder's "Render HTML in Bot Responses" toggle. Confirm against the actual widget frontend's parsing code (`embed.js` or wherever it lives) before real use — see the `// TODO: confirm against embed.js` comment at the point the envelope is built.
 - [ ] **Credential auth header/scheme** (`N8nChatUiApi.credentials.ts`) — `Authorization: Bearer {{apiKey}}`, the `documentationUrl`, and the `test` request URL are all placeholders against an n8nChatUI API that doesn't exist yet. Confirm the real scheme once that API exists.
 
-Three more are open because this package isn't published yet:
+One more is open because this package isn't published yet:
 
-- [ ] **Ownership + contact details** — which npm account / GitHub org this publishes under. `package.json` currently lists **an invented placeholder author name and email** (`n8nChatUI <hello@n8nchatui.com>`) that was never verified to exist, the `LICENSE` copyright line says `n8nChatUI`, and there is no `repository` field. n8n verification expects a reachable maintainer, so **all of these must be replaced with real values before publishing** — they are placeholders, not facts.
-- [ ] **Repository URLs in the codex files** — `nodes/*/*.node.json` point `primaryDocumentation` and `credentialDocumentation` at `github.com/n8nchatui/n8n-nodes-n8nchatui`, which does not exist yet. Update once the repo is created (same decision as ownership above).
 - [ ] **Icons** — both nodes and the credential share a placeholder chat-bubble SVG, now supplied as proper light/dark variants (`n8nchatui.svg` / `n8nchatui.dark.svg`) so lint passes with zero warnings. Replace with the real n8nChatUI logo before publishing; keep both variants.
+
+Resolved:
+
+- [x] **Ownership + contact details** — publishes under the `dani-millside-creative` GitHub account/npm account. `package.json` `author` is `Dani Martin <dani@millsidecreative.com>`, `repository`/`bugs` fields added, `LICENSE` copyright updated to match.
+- [x] **Repository URLs in the codex files** — `nodes/*/*.node.json` `primaryDocumentation`/`credentialDocumentation` now point at `github.com/dani-millside-creative/n8n-nodes-n8nchatui`.
 
 ## Compatibility
 
@@ -105,9 +108,9 @@ The build plan's M4 calls for rebuilding the existing `activecampaign-lead-captu
 Not done here, on purpose — this package is not published, and no git tags were pushed:
 
 1. Confirm the two placeholder assumptions above against the real widget frontend and the (currently nonexistent) analytics API.
-2. Decide ownership (npm account / GitHub org) and update `package.json` (`author`, add `repository`) accordingly.
-3. Set up npm Trusted Publishers for the chosen GitHub Actions repo/workflow.
-4. Wire `.github/workflows/publish.yml` (already scaffolded) for provenance publishing.
+2. Ownership is settled: `dani-millside-creative/n8n-nodes-n8nchatui` on GitHub, same npm account. `package.json` (`author`, `repository`, `bugs`) and the codex doc URLs already point there.
+3. Set up npm Trusted Publishers for that GitHub Actions repo/workflow.
+4. `.github/workflows/publish.yml` (already scaffolded) is wired for provenance publishing against that repo.
 5. Publish via that GitHub Actions workflow (`npm run release` is wired locally too, but shouldn't be the publish path).
 6. Once published, `npx @n8n/scan-community-package n8n-nodes-n8nchatui` can actually run — it fetches from the npm registry by name, so it can't scan local/unpublished code (confirmed while working on this package: it 404s against a package that isn't on npm yet). Run it post-publish as a final check.
 7. Dogfood on a self-hosted instance, recruit real testers, then submit through n8n's Creator Portal for verification.

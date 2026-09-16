@@ -11,8 +11,15 @@
         "webhook"
     ],
     "author": {
-        "name": "n8nChatUI",
-        "email": "hello@n8nchatui.com"
+        "name": "Dani Martin",
+        "email": "dani@millsidecreative.com"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/dani-millside-creative/n8n-nodes-n8nchatui.git"
+    },
+    "bugs": {
+        "url": "https://github.com/dani-millside-creative/n8n-nodes-n8nchatui/issues"
     },
    "scripts": {
 		"build": "n8n-node build",
