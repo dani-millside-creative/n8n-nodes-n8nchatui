@@ -98,7 +98,7 @@ export class N8nChatUi implements INodeType {
 						name: 'Respond',
 						value: 'respond',
 						description: "Send a reply back to the widget's pending chat request",
-						action: 'Respond to a message',
+						action: 'Respond to message',
 					},
 				],
 				default: 'respond',
