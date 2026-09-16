@@ -36,7 +36,7 @@ Accepts the widget's existing payload shape (`chatInput` with a `message` fallba
 
 ### n8nChatUI (action node) — Message → Respond
 
-Sends the reply for the pending request from **n8nChatUI Trigger** (when it's set to `Using 'Respond to n8nChatUI' Node`). Fields: **Text**, **Render HTML** (boolean), **Suggested Replies** (up to 4). Empty suggested replies produce an envelope with no `quickReplies` key at all, rather than an empty array.
+Sends the reply for the pending request from **n8nChatUI Trigger** (when it's set to `Using 'Respond to n8nChatUI' Node`). Fields: **Text**, **Suggested Replies** (up to 4, sent as `followUpPrompts`). Empty suggested replies produce an envelope with no `followUpPrompts` key at all, rather than an empty array. There is no per-response HTML toggle — see **Open items** for why.
 
 ## Credentials
 
@@ -44,9 +44,17 @@ Sends the reply for the pending request from **n8nChatUI Trigger** (when it's se
 
 ## Open items
 
-Two assumptions are unconfirmed against real systems and must be checked before this touches production:
+One serious assumption was found wrong during dogfooding and is not yet fixed — this blocks real production use:
 
-- [ ] **Response envelope shape** (`N8nChatUi.node.ts`, `Message → Respond`) — the `output` / `renderHtml` / `quickReplies` keys are inferred from the existing recipe's `{ output: $json.output }` pattern and the widget builder's "Render HTML in Bot Responses" toggle. Confirm against the actual widget frontend's parsing code (`embed.js` or wherever it lives) before real use — see the `// TODO: confirm against embed.js` comment at the point the envelope is built.
+- [ ] **Incoming webhook authentication design is incompatible with the real widget builder.** `n8nChatUiTrigger`'s "Widget Secret" checks a `webhook_secret` value embedded in the request body (`metadata.webhook_secret` / top-level fallback). The actual n8nChatUI widget builder's "Configure Authentication For Your Webhook" only offers **No Auth**, **JWT Auth**, and **Basic Auth** — all header-based, standard schemes. There is no field anywhere in the widget builder to set a body-embedded secret, so this node's entire auth mechanism cannot be satisfied by the real product as it exists today. Needs a rework to validate an `Authorization` header (Basic decode+compare, or JWT verify) instead of a body field before this trigger can be used for anything beyond a `No Auth` test.
+
+Confirmed and fixed during dogfooding (2026-09-16), by decompiling the live widget bundle (`cdn.n8nchatui.com/v1/sun-rises-slowly.umd.js`) rather than guessing:
+
+- [x] **Response envelope shape.** `output` was correct as built. `renderHtml` was wrong — there is no per-response HTML field the widget reads at all; HTML rendering is controlled entirely by the widget builder's "Render HTML in Bot Responses" toggle (`chatWindow.renderHTML`), applied globally to every message. Removed the `Render HTML` node parameter and the `renderHtml` envelope key entirely — it was a dead no-op. `quickReplies` was the wrong key name — the widget reads `followUpPrompts`. Renamed the envelope key to match; the node's own "Suggested Replies" UI label is unchanged.
+- [x] **Verified live in a browser** against widget `NlvlGb` (`proxy.n8nchatui.com/api/embed/NlvlGb`): reply text renders correctly, and both follow-up-prompt buttons now render and are clickable, sourced straight from the corrected envelope.
+
+Still unconfirmed, but lower priority (v1's `Message → Respond` doesn't consume this credential at all):
+
 - [ ] **Credential auth header/scheme** (`N8nChatUiApi.credentials.ts`) — `Authorization: Bearer {{apiKey}}`, the `documentationUrl`, and the `test` request URL are all placeholders against an n8nChatUI API that doesn't exist yet. Confirm the real scheme once that API exists.
 
 One more is open because this package isn't published yet:

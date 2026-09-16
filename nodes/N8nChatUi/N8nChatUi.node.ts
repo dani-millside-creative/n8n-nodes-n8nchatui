@@ -40,14 +40,6 @@ function toOutputText(value: unknown): string {
 	return String(value);
 }
 
-// A boolean property can still arrive as the string "false" through an expression,
-// which is truthy under a plain `Boolean()` cast.
-function toBoolean(value: unknown): boolean {
-	if (typeof value === 'boolean') return value;
-	if (typeof value === 'string') return value.toLowerCase() === 'true';
-	return Boolean(value);
-}
-
 export class N8nChatUi implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'n8nChatUI',
@@ -119,19 +111,6 @@ export class N8nChatUi implements INodeType {
 				description: 'The reply text sent back to the widget',
 			},
 			{
-				displayName: 'Render HTML',
-				name: 'renderHtml',
-				type: 'boolean',
-				default: false,
-				displayOptions: {
-					show: {
-						resource: ['message'],
-						operation: ['respond'],
-					},
-				},
-				description: 'Whether the widget should render Text as HTML instead of plain text',
-			},
-			{
 				displayName: 'Suggested Replies',
 				name: 'suggestedReplies',
 				type: 'fixedCollection',
@@ -174,7 +153,6 @@ export class N8nChatUi implements INodeType {
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
 		try {
 			const text = toOutputText(this.getNodeParameter('text', 0));
-			const renderHtml = toBoolean(this.getNodeParameter('renderHtml', 0));
 			const suggestedReplies = this.getNodeParameter(
 				'suggestedReplies',
 				0,
@@ -190,20 +168,20 @@ export class N8nChatUi implements INodeType {
 				);
 			}
 
-			// TODO: confirm against embed.js — the `output` / `renderHtml` / `quickReplies`
-			// envelope keys are inferred from the existing recipe's response shape and the
-			// widget builder's "Render HTML in Bot Responses" toggle, not confirmed against
-			// the widget frontend's actual parser. See README "Open items".
+			// Confirmed against the live widget bundle (cdn.n8nchatui.com/v1/sun-rises-slowly.umd.js):
+			// - `output` is the only text field it reads; there is no per-response HTML toggle —
+			//   HTML rendering is controlled entirely by the widget builder's "Render HTML in Bot
+			//   Responses" setting (`chatWindow.renderHTML`), applied to every message, not per reply.
+			// - The quick-reply array is read from `followUpPrompts`, not `quickReplies`.
 			const envelope: IDataObject = {
 				output: text,
-				renderHtml,
 			};
 
-			const quickReplies = replyEntries
+			const followUpPrompts = replyEntries
 				.map((entry) => toReplyText(entry?.text))
 				.filter((entry): entry is string => entry !== undefined);
-			if (quickReplies.length > 0) {
-				envelope.quickReplies = quickReplies;
+			if (followUpPrompts.length > 0) {
+				envelope.followUpPrompts = followUpPrompts;
 			}
 
 			// `sendResponse` needs the full HTTP response wrapper — passing the envelope
