@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import type {
 	ICredentialsDecrypted,
@@ -73,6 +73,52 @@ function parseBasicAuthHeader(headerValue: unknown): string | undefined {
 	}
 }
 
+// n8nChatUI's own signing code only ever uses HS512 with a shared secret and an
+// `exp` claim (confirmed against its source, not assumed). This hardcodes HS512
+// rather than reading the token's own `alg` header — trusting an attacker-supplied
+// `alg` (e.g. accepting "none", or downgrading to a weaker algorithm) is the classic
+// JWT forgery mistake, so the algorithm here is never negotiable from the outside.
+function verifyHs512Jwt(headerValue: unknown, secret: string): boolean {
+	if (typeof headerValue !== 'string') {
+		return false;
+	}
+	const match = /^Bearer\s+(.+)$/i.exec(headerValue.trim());
+	if (!match) {
+		return false;
+	}
+	const parts = match[1].split('.');
+	if (parts.length !== 3 || secret.length === 0) {
+		return false;
+	}
+	const [headerB64, payloadB64, signatureB64] = parts;
+
+	let providedSignature: Buffer;
+	try {
+		providedSignature = Buffer.from(signatureB64, 'base64url');
+	} catch {
+		return false;
+	}
+	const expectedSignature = createHmac('sha512', secret).update(`${headerB64}.${payloadB64}`).digest();
+
+	if (providedSignature.length !== expectedSignature.length) {
+		// Keep timing consistent even on a length mismatch.
+		timingSafeEqual(expectedSignature, expectedSignature);
+		return false;
+	}
+	if (!timingSafeEqual(providedSignature, expectedSignature)) {
+		return false;
+	}
+
+	let payload: unknown;
+	try {
+		payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+	} catch {
+		return false;
+	}
+	const exp = asObject(payload)?.exp;
+	return typeof exp === 'number' && Number.isFinite(exp) && Date.now() < exp * 1000;
+}
+
 export class N8nChatUiTrigger implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'n8nChatUI Trigger',
@@ -95,12 +141,10 @@ export class N8nChatUiTrigger implements INodeType {
 				path: 'n8nchatui',
 			},
 		],
-		// Only Basic Auth and None are supported — these are the two of the widget
-		// builder's three "Configure Authentication For Your Webhook" options (the
-		// third, JWT Auth, isn't implemented; see README "Open items"). There is no
-		// body-embedded-secret option any more: the widget builder has no field for
-		// one, so that design (v1's original "Widget Secret") could never actually be
-		// satisfied by the real product.
+		// Matches all three of the widget builder's "Configure Authentication For Your
+		// Webhook" options. There is no body-embedded-secret option: the widget builder
+		// has no field for one, so that design (v1's original "Widget Secret") could
+		// never actually be satisfied by the real product — see README "Open items".
 		credentials: [
 			{
 				name: 'n8nChatUiTriggerAuthApi',
@@ -109,6 +153,16 @@ export class N8nChatUiTrigger implements INodeType {
 				displayOptions: {
 					show: {
 						authentication: ['basicAuth'],
+					},
+				},
+			},
+			{
+				name: 'n8nChatUiTriggerJwtAuthApi',
+				required: true,
+				testedBy: 'testN8nChatUiTriggerJwtAuth',
+				displayOptions: {
+					show: {
+						authentication: ['jwtAuth'],
 					},
 				},
 			},
@@ -121,6 +175,7 @@ export class N8nChatUiTrigger implements INodeType {
 				noDataExpression: true,
 				options: [
 					{ name: 'Basic Auth', value: 'basicAuth' },
+					{ name: 'JWT Auth', value: 'jwtAuth' },
 					{ name: 'None', value: 'none' },
 				],
 				default: 'basicAuth',
@@ -169,6 +224,20 @@ export class N8nChatUiTrigger implements INodeType {
 						"Both fields are set. There's no live n8nChatUI system to verify them against — this must match what you configure in the widget builder's Basic Auth setting.",
 				};
 			},
+			async testN8nChatUiTriggerJwtAuth(
+				this: ICredentialTestFunctions,
+				credential: ICredentialsDecrypted,
+			): Promise<INodeCredentialTestResult> {
+				const data = credential.data as { secret?: string } | undefined;
+				if (!data?.secret) {
+					return { status: 'Error', message: 'JWT Secret is required' };
+				}
+				return {
+					status: 'OK',
+					message:
+						"Secret is set. There's no live n8nChatUI system to verify it against — this must match what you configure in the widget builder's JWT Auth setting.",
+				};
+			},
 		},
 	};
 
@@ -191,22 +260,30 @@ export class N8nChatUiTrigger implements INodeType {
 	async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
 		const authentication = this.getNodeParameter('authentication') as string;
 
-		if (authentication === 'basicAuth') {
+		if (authentication === 'basicAuth' || authentication === 'jwtAuth') {
 			// Any failure here — missing/malformed header, missing credential, wrong
-			// user/password — fails closed to the same generic 401. Catching
-			// `getCredentials` also stops a misconfigured node (no credential attached)
-			// from surfacing as a 500 with internal detail to an unauthenticated caller.
+			// credentials, bad/expired token — fails closed to the same generic 401.
+			// Catching `getCredentials` also stops a misconfigured node (no credential
+			// attached) from surfacing as a 500 with internal detail to an
+			// unauthenticated caller.
 			let authorized = false;
 			try {
 				const headerData = this.getHeaderData();
-				const provided = parseBasicAuthHeader(headerData.authorization);
-				if (provided !== undefined) {
-					const credentials = (await this.getCredentials('n8nChatUiTriggerAuthApi')) as {
-						user: string;
-						password: string;
+				if (authentication === 'basicAuth') {
+					const provided = parseBasicAuthHeader(headerData.authorization);
+					if (provided !== undefined) {
+						const credentials = (await this.getCredentials('n8nChatUiTriggerAuthApi')) as {
+							user: string;
+							password: string;
+						};
+						const expected = `${asString(credentials.user) ?? ''}:${asString(credentials.password) ?? ''}`;
+						authorized = secretsMatch(provided, expected);
+					}
+				} else {
+					const credentials = (await this.getCredentials('n8nChatUiTriggerJwtAuthApi')) as {
+						secret: string;
 					};
-					const expected = `${asString(credentials.user) ?? ''}:${asString(credentials.password) ?? ''}`;
-					authorized = secretsMatch(provided, expected);
+					authorized = verifyHs512Jwt(headerData.authorization, asString(credentials.secret) ?? '');
 				}
 			} catch {
 				authorized = false;

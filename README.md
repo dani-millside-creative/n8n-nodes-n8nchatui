@@ -2,10 +2,10 @@
 
 This is an n8n community node package for [n8nChatUI](https://n8nchatui.com). It replaces the hand-built webhook/Set/IF/Respond-to-Webhook plumbing that n8nChatUI recipes (e.g. the ActiveCampaign lead-capture recipe) currently use to talk to the widget, with two purpose-built nodes:
 
-- **n8nChatUI Trigger** — a webhook trigger that authenticates incoming widget messages (No Auth or Basic Auth, matching the widget builder's own "Configure Authentication For Your Webhook" options) and emits a normalized `{ message, sessionId, pageUrl, metadata }` item.
+- **n8nChatUI Trigger** — a webhook trigger that authenticates incoming widget messages (No Auth, Basic Auth, or JWT Auth — all three of the widget builder's "Configure Authentication For Your Webhook" options) and emits a normalized `{ message, sessionId, pageUrl, metadata }` item.
 - **n8nChatUI** (action node, `Message → Respond`) — sends the reply back to the widget's pending chat request, with `Text` and up to 4 `Suggested Replies`.
 
-There are two credentials. `n8nChatUiTriggerAuthApi` (User + Password) backs the trigger's Basic Auth mode. `n8nChatUiApi` (API key) is unused by either node in v1 — it exists only so a future v1.1 operation can be added without restructuring. See **Open items** below.
+There are three credentials. `n8nChatUiTriggerAuthApi` (User + Password) backs the trigger's Basic Auth mode. `n8nChatUiTriggerJwtAuthApi` (a single shared secret) backs its JWT Auth mode. `n8nChatUiApi` (API key) is unused by either node in v1 — it exists only so a future v1.1 operation can be added without restructuring. See **Open items** below.
 
 **Deliberately excluded from v1:** no `usableAsTool: true`, no LangChain / `@n8n/n8n-nodes-langchain` dependency anywhere in this package. AI-tool-capable community nodes currently can't be verified for n8n Cloud, and Cloud users are the primary audience for this package.
 
@@ -29,7 +29,7 @@ Not yet published (see [Open items](#open-items) and the handoff notes below). O
 
 Webhook trigger. Configure:
 
-- **Authentication** — `Basic Auth` (default, backed by the `n8nChatUiTriggerAuthApi` credential) or `None`. Must match the widget builder's own "Configure Authentication For Your Webhook" setting — the widget builder only offers No Auth / JWT Auth / Basic Auth, and JWT isn't implemented here (see **Open items**).
+- **Authentication** — `Basic Auth` (default, backed by `n8nChatUiTriggerAuthApi`), `JWT Auth` (backed by `n8nChatUiTriggerJwtAuthApi`, HS512 only — that's the only algorithm n8nChatUI's own signing code ever uses, confirmed against its source, so there's no algorithm field to expose), or `None`. Must match the widget builder's own "Configure Authentication For Your Webhook" setting.
 - **Respond** — `Immediately` or `Using 'Respond to n8nChatUI' Node` (default), mirroring the core Webhook node's `responseMode` pattern.
 
 Accepts the widget's existing payload shape (`chatInput` with a `message` fallback). On an auth failure (missing/malformed `Authorization` header, or wrong credentials) it returns HTTP 401 with `{ "output": "Sorry, something went wrong. Please try again later." }` directly and does not run the rest of the workflow.
@@ -42,19 +42,17 @@ Sends the reply for the pending request from **n8nChatUI Trigger** (when it's se
 
 **n8nChatUI Trigger Basic Auth** (`n8nChatUiTriggerAuthApi`) — `User` + `Password`. Backs the trigger's `Basic Auth` mode; must match the same values entered in the widget builder's Basic Auth setting. This is a package-local credential rather than n8n's built-in `httpBasicAuth` — community nodes can't reference another package's credential type (n8n's own lint enforces this), so this package ships a structurally identical one.
 
+**n8nChatUI Trigger JWT Auth** (`n8nChatUiTriggerJwtAuthApi`) — a single `JWT Secret` field. Backs the trigger's `JWT Auth` mode; must match the secret entered in the widget builder's JWT Auth setting. Verified with a hand-rolled HS512 (`node:crypto` `createHmac`) checker rather than a JWT library — see **Development** for why that's a deliberate, reasonable choice here rather than a shortcut.
+
 **n8nChatUI API** (`n8nChatUiApi`) — a single `API Key` field. Not required by the v1 `Message → Respond` operation; built ahead of need for a future operation. See [Open items](#open-items) — the auth header/scheme it uses is an unconfirmed placeholder.
 
 ## Open items
-
-Not yet implemented — the widget builder's third auth option:
-
-- [ ] **JWT Auth is not implemented.** The widget builder's "Configure Authentication For Your Webhook" offers No Auth / JWT Auth / Basic Auth; this package only implements No Auth and Basic Auth (a deliberate scope call, made together with Dani — JWT needs a real signature-verification dependency, e.g. `jsonwebtoken`, which the package currently has zero of). Add it as `n8nChatUiTrigger`'s third `Authentication` option, backed by a package-local `jwtAuth`-shaped credential, if a workflow needs it.
 
 Confirmed and fixed during dogfooding (2026-09-16), by decompiling the live widget bundle (`cdn.n8nchatui.com/v1/sun-rises-slowly.umd.js`) rather than guessing:
 
 - [x] **Response envelope shape.** `output` was correct as built. `renderHtml` was wrong — there is no per-response HTML field the widget reads at all; HTML rendering is controlled entirely by the widget builder's "Render HTML in Bot Responses" toggle (`chatWindow.renderHTML`), applied globally to every message. Removed the `Render HTML` node parameter and the `renderHtml` envelope key entirely — it was a dead no-op. `quickReplies` was the wrong key name — the widget reads `followUpPrompts`. Renamed the envelope key to match; the node's own "Suggested Replies" UI label is unchanged.
 - [x] **Verified live in a browser** against widget `NlvlGb` (`proxy.n8nchatui.com/api/embed/NlvlGb`): reply text renders correctly, and both follow-up-prompt buttons now render and are clickable, sourced straight from the corrected envelope.
-- [x] **Incoming webhook authentication design was incompatible with the real widget builder — fixed.** `n8nChatUiTrigger`'s original "Widget Secret" checked a `webhook_secret` value embedded in the request body, but the widget builder's "Configure Authentication For Your Webhook" only offers header-based schemes (No Auth / JWT Auth / Basic Auth) — there is no field anywhere in the widget builder to set a body-embedded secret, so v1's entire auth mechanism could never be satisfied by the real product. Reworked to a n8n-credential-backed `Authentication` option (`Basic Auth` / `None`) that validates a standard `Authorization: Basic` header instead — see **Credentials**. This also fixes the plaintext-in-workflow-JSON tradeoff the old node-parameter secret had, since real n8n credentials are encrypted at rest. Verified live against a self-hosted instance: no header → 401, wrong credentials → 401, correct Basic Auth → 200 with the correct envelope.
+- [x] **Incoming webhook authentication design was incompatible with the real widget builder — fixed.** `n8nChatUiTrigger`'s original "Widget Secret" checked a `webhook_secret` value embedded in the request body, but the widget builder's "Configure Authentication For Your Webhook" only offers header-based schemes (No Auth / JWT Auth / Basic Auth) — there is no field anywhere in the widget builder to set a body-embedded secret, so v1's entire auth mechanism could never be satisfied by the real product. Reworked to a n8n-credential-backed `Authentication` option (`Basic Auth` / `JWT Auth` / `None`) that validates a standard `Authorization` header instead — see **Credentials**. This also fixes the plaintext-in-workflow-JSON tradeoff the old node-parameter secret had, since real n8n credentials are encrypted at rest. Verified live against a self-hosted instance: Basic Auth (no header → 401, wrong credentials → 401, correct → 200 with the correct envelope) and JWT Auth (no token → 401, expired → 401, wrong secret/tampered signature → 401, valid → 200), the latter tested with real HS512 tokens signed the same way n8nChatUI's own backend signs them.
 
 Still unconfirmed, but lower priority (v1's `Message → Respond` doesn't consume this credential at all):
 
@@ -95,14 +93,18 @@ Confirmed after fixes: bugs 3, 4, and 6 above describe the original body-embedde
 
 Current behaviour, verified live against a self-hosted instance: no `Authorization` header → 401; wrong Basic Auth credentials → 401; correct Basic Auth → 200 with the real envelope, trigger correctly extracts `message` (`chatInput` falling back to `message`), `sessionId`, and `pageUrl`; both `Respond` modes send a clean response; empty **Suggested Replies** omits `followUpPrompts` entirely; multi-item input responds once, deterministically, using item 0.
 
+### Why JWT Auth is hand-rolled, not a library
+
+`n8nChatUiTriggerJwtAuthApi` is verified with a ~30-line HS512 checker (`verifyHs512Jwt` in `N8nChatUiTrigger.node.ts`) instead of a JWT library like `jsonwebtoken` — the exact library n8nChatUI's own backend uses to sign these tokens. This was a deliberate choice, not a shortcut: n8nChatUI's signing code (`actions/bots.ts` in the main app repo) only ever uses HS512 — the `JWTAlgorithm` enum has exactly one value — so there's no algorithm negotiation to support, and general-purpose JWT parsing would be more surface area than the problem needs. The verifier hardcodes HS512 rather than trusting the token's own `alg` header, which is what closes off the classic "alg: none" JWT forgery class of bug. Verified live against a self-hosted instance with real HS512 tokens signed the same way n8nChatUI signs them: valid → 200, expired → 401, wrong secret (bad signature) → 401, garbage token → 401 (no crash, no stack trace).
+
 ### Verification-readiness checks
 
 - `npx n8n-node cloud-support` → **Cloud support ENABLED**, strict mode on, default ESLint config, "eligible for n8n Cloud verification (if lint passes)".
 - `npm run lint` → **0 errors, 0 warnings** (exit 0). No `usableAsTool: true`, no LangChain, no runtime `dependencies`, no restricted imports/globals, no lifecycle scripts, valid `peerDependencies` (`n8n-workflow: "*"` only), valid `n8n` manifest with `dist/` paths. Also caught (and required fixing) that community nodes can't reference another package's credential type — `@n8n/community-nodes/no-credential-reuse` — which is why the Basic Auth credential is package-local rather than n8n's built-in `httpBasicAuth`.
 - Codex files (`nodes/*/*.node.json`) added for both nodes — these were dropped when the scaffold's `Example` folder was deleted. Verified they reach `dist` and that n8n loads them (categories resolve to `Communication`, `Marketing`, `Custom Nodes` in the live node list).
 - `LICENSE` file added — `package.json` declared MIT with no license file present.
-- Both nodes and both credentials register in a live instance; all four themed icon files resolve and serve HTTP 200.
-- `npm pack --dry-run` → 22 files, 52.3kB unpacked, contains exactly the compiled nodes, both credentials, codex, icons, README and LICENSE.
+- Both nodes and all three credentials register in a live instance; all four themed icon files resolve and serve HTTP 200.
+- `npm pack --dry-run` → 25 files, 60.8kB unpacked, contains exactly the compiled nodes, all three credentials, codex, icons, README and LICENSE. Still **zero runtime `dependencies`** — JWT verification is a hand-rolled HS512 checker using `node:crypto`, not a library (see Development).
 
 ### ⚠️ A note on the official scaffolding tool
 

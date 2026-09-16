@@ -39,7 +39,8 @@
         "strict": true,
         "credentials": [
             "dist/credentials/N8nChatUiApi.credentials.js",
-            "dist/credentials/N8nChatUiTriggerAuthApi.credentials.js"
+            "dist/credentials/N8nChatUiTriggerAuthApi.credentials.js",
+            "dist/credentials/N8nChatUiTriggerJwtAuthApi.credentials.js"
         ],
         "nodes": [
             "dist/nodes/N8nChatUiTrigger/N8nChatUiTrigger.node.js",
