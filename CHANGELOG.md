@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-09-16)
 
 - Dogfooded live against a real n8nChatUI widget (`NlvlGb`) by decompiling the widget's own JS bundle rather than guessing. Found and fixed two wrong assumptions in the response envelope: `renderHtml` was a dead no-op (HTML rendering is controlled entirely by the widget builder's global toggle, not a per-response field) and `quickReplies` was the wrong key — the widget reads `followUpPrompts`. Removed the `Render HTML` node parameter; renamed the envelope key. Verified both fixes visually in a browser: reply text and follow-up-prompt buttons now render correctly.
 - Fixed the incoming-auth mismatch found above: `n8nChatUiTrigger`'s "Widget Secret" (a body-embedded `webhook_secret`) could never be satisfied by the real widget builder, which only offers header-based No Auth/JWT/Basic Auth. Reworked to a credential-backed `Authentication` option (`Basic Auth` / `None`) validating a standard `Authorization: Basic` header, backed by a new package-local `n8nChatUiTriggerAuthApi` credential (User + Password) — community nodes can't reference n8n's built-in `httpBasicAuth` credential (`@n8n/community-nodes/no-credential-reuse`). Also fixes the old plaintext-in-workflow-JSON tradeoff, since real credentials are encrypted at rest. Verified live: no auth header → 401, wrong credentials → 401, correct Basic Auth → 200 with the real envelope.

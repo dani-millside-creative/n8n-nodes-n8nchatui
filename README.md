@@ -21,7 +21,7 @@ There are three credentials. `n8nChatUiTriggerAuthApi` (User + Password) backs t
 
 ## Installation
 
-Not yet published (see [Open items](#open-items) and the handoff notes below). Once published, follow the [community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) — as an unverified community node it will only install on self-hosted n8n via the manual "I understand the risks" flow, not directly on n8n Cloud, until it passes n8n's verification process.
+Published on npm as `n8n-nodes-n8nchatui@0.1.0` (2026-09-16). Follow the [community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) — as an unverified community node it will only install on self-hosted n8n via the manual "I understand the risks" flow, not directly on n8n Cloud, until it passes n8n's verification process (see Handoff).
 
 ## Operations
 
@@ -113,20 +113,15 @@ The build plan's M4 calls for rebuilding the existing `activecampaign-lead-captu
 
 ## Handoff (human-only — npm/GitHub account actions)
 
-Status as of 2026-09-16 — ready to publish, blocked only on the npm-account step below:
+Status as of 2026-09-16 — **published**:
 
 1. [x] Confirmed the remaining placeholder assumption (`n8nChatUiApi` credential scheme) as far as it can be without a real API — see Open items. Response envelope and trigger auth are fully confirmed and fixed against the real widget.
 2. [x] Ownership is settled: `dani-millside-creative/n8n-nodes-n8nchatui` on GitHub, same npm account. `package.json` (`author`, `repository`, `bugs`) and the codex doc URLs already point there.
 3. [x] Icon decision made — shipping the existing placeholder (see Open items).
-4. [x] Package name confirmed available on the npm registry (`npm view n8n-nodes-n8nchatui` → 404, unclaimed).
-5. [x] Dogfooded live on a self-hosted instance (`n8n.millsidecreative.com`) — see Open items and the "Development" bug list for what was found and fixed this way.
-6. [ ] **Set up npm Trusted Publishers — this is the one remaining blocker, and it needs Dani's npm login, not something doable from here:**
-   - On [npmjs.com](https://npmjs.com), since this package has never been published, create it first with a throwaway local publish OR use "Create a new Trusted Publisher" from your npm account settings before the first publish (npm's Trusted Publishers UI supports pre-registering a publisher for a package name that doesn't exist yet — check the current npm docs, this has changed over time).
-   - Repository owner: `dani-millside-creative`, Repository name: `n8n-nodes-n8nchatui`, Workflow name: `publish.yml`, Environment: leave blank.
-   - Full instructions are already written out at the top of `.github/workflows/publish.yml`, including the NPM_TOKEN fallback if Trusted Publishers doesn't work for a never-published package.
-7. [ ] Once that's confirmed done: push a version tag (`git tag 0.1.0 && git push origin 0.1.0`) to trigger `publish.yml`, which lints, builds, and publishes with provenance. **Not done automatically here — ask explicitly when ready**, since this is a real, public, hard-to-reverse action.
-8. [ ] Post-publish: run `npx @n8n/scan-community-package n8n-nodes-n8nchatui` as a final check (it 404s against unpublished code, confirmed while working on this package, so it can't be run before step 7).
-9. [ ] Recruit real testers, then submit through [n8n's Creator Portal](https://docs.n8n.io/integrations/creating-nodes/deploy/submit-community-nodes/) for verification — this is a form tied to your own account, not something done from here.
+4. [x] Dogfooded live on a self-hosted instance (`n8n.millsidecreative.com`) — see Open items and the "Development" bug list for what was found and fixed this way.
+5. [x] **Published to npm** — `n8n-nodes-n8nchatui@0.1.0`, via `publish.yml` (GitHub Actions, provenance-signed). Trusted Publishers turned out to require the package to already exist (its settings page 404s for a never-published name), so this went out via the `NPM_TOKEN` fallback instead — a Granular Access Token with **"Bypass 2FA"** enabled specifically (npm rejects CI publishes from tokens without it: `403 ... bypass 2fa enabled is required to publish packages`). Also fixed a real bug in the scaffolded `publish.yml` along the way: its `NPM_TOKEN: $` env line was truncated (should be `${{ secrets.NPM_TOKEN }}`), so the secret was never actually reaching the job on the first two attempts.
+6. [x] Post-publish check: `npx @n8n/scan-community-package n8n-nodes-n8nchatui` → all checks passed (provenance, source fetch, security analysis).
+7. [ ] Recruit real testers, then submit through [n8n's Creator Portal](https://docs.n8n.io/integrations/creating-nodes/deploy/submit-community-nodes/) for verification — this is a form tied to your own account, not something done from here.
 
 ## Resources
 
