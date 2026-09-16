@@ -38,7 +38,8 @@
         "n8nNodesApiVersion": 1,
         "strict": true,
         "credentials": [
-            "dist/credentials/N8nChatUiApi.credentials.js"
+            "dist/credentials/N8nChatUiApi.credentials.js",
+            "dist/credentials/N8nChatUiTriggerAuthApi.credentials.js"
         ],
         "nodes": [
             "dist/nodes/N8nChatUiTrigger/N8nChatUiTrigger.node.js",
